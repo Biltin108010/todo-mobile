@@ -8,6 +8,7 @@ export default function App() {
   const [tasks, setTasks] = useState([]);
   const [newTitle, setNewTitle] = useState('');
   const [newDescription, setNewDescription] = useState('');
+  const [editingTask, setEditingTask] = useState(null); // Track the task being edited
   const [refreshing, setRefreshing] = useState(false);
   const [theme, setTheme] = useState('light');
   const [filter, setFilter] = useState('All');
@@ -34,11 +35,12 @@ export default function App() {
 
   const addTask = async () => {
     if (!newTitle.trim()) return;
-
+  
     try {
       await API.post('/tasks', {
         title: newTitle,
         description: newDescription,
+        completed: false, // ← Add this!
       });
       setNewTitle('');
       setNewDescription('');
@@ -47,15 +49,47 @@ export default function App() {
       console.error('Error adding task:', error);
     }
   };
-
+  
   const deleteTask = async (id) => {
     try {
-      await API.delete(`/tasks/${id}`);
+      console.log(`Attempting to delete task with ID: ${id}`);
+      const res = await API.delete(`/tasks/${id}`);
+      console.log('Task deleted:', res.data);
       fetchTasks();
     } catch (error) {
-      console.error('Error deleting task:', error);
+      console.error('Error deleting task:', error.response || error.message);
     }
   };
+
+  const updateTask = async (task) => {
+    console.log('Task object before update:', task); // Add this line to check the task structure
+  
+    if (!task || !task.id || !newTitle.trim()) {
+      console.log('Invalid task object or missing title');
+      return;
+    }
+  
+    const updatedTask = {
+      title: newTitle,
+      description: newDescription,
+      completed: false,
+    };
+  
+    try {
+      console.log(`Attempting to update task with ID: ${task.id}`);
+      const res = await API.put(`/tasks/${task.id}`, updatedTask);
+      console.log('Task updated:', res.data);
+      setNewTitle('');
+      setNewDescription('');
+      setEditingTask(null); // Clear after update
+      fetchTasks();
+    } catch (error) {
+      console.error('Error updating task:', error.response || error.message);
+    }
+  };
+  
+
+  
 
   const toggleComplete = async (task) => {
     try {
@@ -67,6 +101,12 @@ export default function App() {
     } catch (error) {
       console.error('Error updating task:', error);
     }
+  };
+
+  const editTask = (task) => {
+    setEditingTask(task);
+    setNewTitle(task.title);
+    setNewDescription(task.description);
   };
 
   const filteredTasks = tasks.filter((task) => {
@@ -100,25 +140,25 @@ export default function App() {
         style={styles.input}
         placeholderTextColor={isDark ? '#aaa' : '#666'}
       />
-      <TouchableOpacity style={styles.addButton} onPress={addTask}>
-        <Text style={styles.addButtonText}>➕ Add Task</Text>
-      </TouchableOpacity>
+      {editingTask ? (
+        <TouchableOpacity style={styles.addButton} onPress={() => updateTask(editingTask)}>
+          <Text style={styles.addButtonText}>✏️ Update Task</Text>
+        </TouchableOpacity>
+      ) : (
+        <TouchableOpacity style={styles.addButton} onPress={addTask}>
+          <Text style={styles.addButtonText}>➕ Add Task</Text>
+        </TouchableOpacity>
+      )}
 
       <View style={styles.filterContainer}>
         {['All', 'Pending', 'Finished'].map((type) => (
           <TouchableOpacity
             key={type}
-            style={[
-              styles.filterButton,
-              filter === type && styles.filterButtonActive,
-            ]}
+            style={[styles.filterButton, filter === type && styles.filterButtonActive]}
             onPress={() => setFilter(type)}
           >
             <Text
-              style={[
-                styles.filterText,
-                filter === type && styles.filterTextActive,
-              ]}
+              style={[styles.filterText, filter === type && styles.filterTextActive]}
             >
               {type}
             </Text>
@@ -140,9 +180,14 @@ export default function App() {
                 <Text style={styles.taskDesc}>{item.description}</Text>
               </View>
             </View>
-            <TouchableOpacity onPress={() => deleteTask(item.id)}>
-              <Text style={styles.delete}>🗑</Text>
-            </TouchableOpacity>
+            <View style={styles.actions}>
+              <TouchableOpacity onPress={() => editTask(item)}>
+                <Text style={styles.edit}>✏️ Edit</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => deleteTask(item.id)}>
+                <Text style={styles.delete}>🗑</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         )}
       />
@@ -252,9 +297,17 @@ function createStyles(isDark) {
       textDecorationLine: 'line-through',
       color: 'gray',
     },
+    actions: {
+      flexDirection: 'row',
+      gap: 10,
+    },
+    edit: {
+      color: 'blue',
+      fontWeight: 'bold',
+    },
     delete: {
-      fontSize: 18,
       color: 'red',
+      fontWeight: 'bold',
     },
   });
 }
